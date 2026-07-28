@@ -54,10 +54,10 @@ export const TREASURES = [
 export const LEVELS = ['level1', 'level2', 'level_boss1', 'level3', 'level_boss2', 'level4', 'level_boss3', 'level5', 'level_boss4'];
 
 export const ASSET_PATHS = {
-  player_idle:   '/assets/images/player_idle.png',
-  player_attack: '/assets/images/player_attack.png',
-  player_skill:  '/assets/images/player_skill.png',
-  level1:        '/assets/levels/level_1.json',
-  level2:        '/assets/levels/level_2.json',
-  level_boss:    '/assets/levels/level_boss.json',
+  player_idle:   '../assets/images/player_idle.png',
+  player_attack: '../assets/images/player_attack.png',
+  player_skill:  '../assets/images/player_skill.png',
+  level1:        '../assets/levels/level_1.json',
+  level2:        '../assets/levels/level_2.json',
+  level_boss:    '../assets/levels/level_boss.json',
 };

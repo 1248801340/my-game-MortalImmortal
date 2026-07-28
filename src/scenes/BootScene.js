@@ -8,19 +8,19 @@ const W = 960, H = 540;
 const ENEMY_SPRITE_H = 72;
 
 const BG_FILES = {
-  level_bg1: '/assets/images/bg/level_bg1.png',
-  level_bg2: '/assets/images/bg/level_bg2.png',
+  level_bg1: '../assets/images/bg/level_bg1.png',
+  level_bg2: '../assets/images/bg/level_bg2.png',
 };
 
 const ROLE_FILES = {
   // 血煞
-  xuesha_idle:   '/assets/images/role/xuesha_idle-remove-bg-io.png',
-  xuesha_attack: '/assets/images/role/xuesha_attack-remove-bg-io.png',
-  xuesha_skill:  '/assets/images/role/xuesha_skill-remove-bg-io.png',   // 死亡帧
+  xuesha_idle:   '../assets/images/role/xuesha_idle-remove-bg-io.png',
+  xuesha_attack: '../assets/images/role/xuesha_attack-remove-bg-io.png',
+  xuesha_skill:  '../assets/images/role/xuesha_skill-remove-bg-io.png',   // 死亡帧
   // ★ 墨老（第二关 Boss，同结构 idle/attack/skill 透明 PNG）
-  molao_idle:    '/assets/images/role/molao_idle-remove-bg-io.png',
-  molao_attack:  '/assets/images/role/molao_attack-remove-bg-io.png',
-  molao_skill:   '/assets/images/role/molao_skill-remove-bg-io.png',
+  molao_idle:    '../assets/images/role/molao_idle-remove-bg-io.png',
+  molao_attack:  '../assets/images/role/molao_attack-remove-bg-io.png',
+  molao_skill:   '../assets/images/role/molao_skill-remove-bg-io.png',
 };
 
 const FALLBACK_PAL = {
