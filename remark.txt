@@ -1,3 +1,7 @@
 set PATH=C:\Users\320323709\localdesktop\node-v24.18.0-win-x64;%PATH%
 cd C:\Users\320323709\localdesktop\game-project
 npm run dev
+
+git add -A
+git commit -m "修改内容"
+git push
