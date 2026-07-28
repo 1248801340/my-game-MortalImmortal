@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import KofFighter, { SLOT } from '../entities/KofFighter.js';
 import WenTianRen from '../entities/WenTianRen.js';
-import FighterAI from '../ai/FighterAI.js';
+import FighterAI from '../AI/FighterAI.js';
 
 // ★ 全部用数字键码（DOM keyCode），彻底绕开 Phaser 字符串键码命名差异 / 小键盘命名坑 / addKeys 抛错
 const P1 = {
