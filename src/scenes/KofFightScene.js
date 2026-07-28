@@ -1,17 +1,15 @@
 import Phaser from 'phaser';
 import KofFighter, { SLOT } from '../entities/KofFighter.js';
 import WenTianRen from '../entities/WenTianRen.js';
-import FighterAI from '../AI/FighterAI.js';
+import FighterAI from '../ai/FighterAI.js';
 
-// ★ 全部用数字键码（DOM keyCode），彻底绕开 Phaser 字符串键码命名差异 / 小键盘命名坑 / addKeys 抛错
 const P1 = {
-  move: { left: 65, right: 68, up: 87, down: 83 },          // A D W S
-  slots: [70, 71, 72, 82, 84, 89],                          // F G H R T Y
+  move: { left: 65, right: 68, up: 87, down: 83 },
+  slots: [70, 71, 72, 82, 84, 89],
 };
 const P2 = {
-  move: { left: 37, right: 39, up: 38, down: 40,            // 方向键
-          nleft: 100, nright: 102, nup: 104, ndown: 98 },    // 小键盘 4 6 8 2
-  slots: [188, 190, 191, 76, 186, 222],                     // , . / L ; '
+  move: { left: 37, right: 39, up: 38, down: 40, nleft: 100, nright: 102, nup: 104, ndown: 98 },
+  slots: [188, 190, 191, 76, 186, 222],
 };
 const FIT = 'cover';
 
@@ -30,7 +28,11 @@ export default class KofFightScene extends Phaser.Scene {
     this.load.image('kf_fly',    IMG + 'player_fly-remove-bg-io.png');
     this.load.image('wt_zhanli', IMG + 'wentianren_zhanli-remove-bg-io.png');
     this.load.image('wt_shifa',  IMG + 'wentianren_shifa-remove-bg-io.png');
-    this.load.image('wt_mohua',  IMG + 'wentianren_mohua-remove-bg-io.png');   // ★ 魔化形象
+    this.load.image('wt_mohua',  IMG + 'wentianren_mohua-remove-bg-io.png');
+    this.load.image('wt_walk1',  IMG + 'wentianren_walk1-remove-bg-io.png');
+    this.load.image('wt_walk2',  IMG + 'wentianren_walk2-remove-bg-io.png');
+    this.load.image('wt_jump2',  IMG + 'wentianren_jump2-remove-bg-io.png');
+    this.load.image('wt_jump3',  IMG + 'wentianren_jump3-remove-bg-io.png');
   }
 
   create() {
@@ -60,11 +62,11 @@ export default class KofFightScene extends Phaser.Scene {
 
     this.p1 = new KofFighter(this, W * 0.3, groundY - 40, null, {
       id: 'p1', name: '韩立', hp: 1000, tint: 0xffffff, facing: 1, projGroup: this.projectiles,
-      afterImageTint: 0x88ccff,
+      afterImageTint: 0x88ccff, flyLightning: true,
       anims: {
-        idle: has('kf_idle') ? ['kf_idle'] : ['kf_common'],
+        idle: ['kf_common'],
         attack: has('kf_attack') ? ['kf_attack'] : null,
-        shifa: has('kf_skill') ? ['kf_skill'] : (has('kf_shifa') ? ['kf_shifa'] : null),
+        shifa: ['kf_shifa'],
         xuemo: ['kf_xuemo'], fly: ['kf_fly'],
       },
     });
@@ -73,7 +75,7 @@ export default class KofFightScene extends Phaser.Scene {
       id: 'p2', name: '温天仁', hp: mode === 'pvp' ? 1000 : 1400,
       tint: 0xffffff, facing: -1, projGroup: this.projectiles,
       afterImageTint: 0xcc88ff,
-      anims: { idle: ['wt_zhanli'], shifa: ['wt_shifa'], transform: ['wt_mohua'] },   // ★ 魔化换图
+      anims: { idle: ['wt_zhanli'], walk: { frames: ['wt_walk1', 'wt_walk2'], fps: 6 }, jump_up: ['wt_jump2'], jump_down: ['wt_jump3'], shifa: ['wt_shifa'], transform: ['wt_mohua'] },
     });
 
     this.ai = (mode === 'pve') ? new FighterAI(this.p2) : null;
@@ -100,9 +102,9 @@ export default class KofFightScene extends Phaser.Scene {
     if (!a || !b) return false;
     return a.right > b.left && a.left < b.right && a.bottom > b.top && a.top < b.bottom;
   }
+  rectHit(b, r) { return b.right > r.left && b.left < r.right && b.bottom > r.top && b.top < r.bottom; }
 
   bindInput(f, cfg) {
-    // ★ try/catch 双保险：即便某键异常，也不让一个坏键拖垮整条绑定
     let k = {}, sk = {};
     try { k = this.input.keyboard.addKeys(cfg.move); } catch (e) { console.warn('move keys', e); }
     try { sk = this.input.keyboard.addKeys(Object.fromEntries(cfg.slots.map((s, i) => ['s' + i, s]))); } catch (e) { console.warn('slot keys', e); }
@@ -130,12 +132,14 @@ export default class KofFightScene extends Phaser.Scene {
     }
     if (proj.stunMs) {
       if (target.invincible) return;
-      target.applyStun(proj.stunMs);
+      if (target.shield && target.shield.type === 'aura') { target.shieldHit(40); if (this.floatDamage) this.floatDamage(target.x, target.y - target.displayHeight / 2, 0, '#66ffff'); }
+      else target.applyStun(proj.stunMs);
       if (proj.consumeOnHit) proj.destroy();
       return;
     }
     if (proj.hitTargets.has(target.id)) return;
     proj.hitTargets.add(target.id);
+    if (proj.homing) this.boomFx(proj.x, proj.y, 0xffee66);
     target.takeDamage(proj.damage, (proj.knockX || 0) * (proj.facing || 1));
     if (proj.consumeOnHit) proj.destroy();
   }
@@ -146,7 +150,6 @@ export default class KofFightScene extends Phaser.Scene {
     this.mirrors.push({ img, target, owner: owner.id, t: 0, ttl: 1000 });
   }
 
-  // ★ 陆续召唤 6 只小怪（每 0.7s 一只，在 6s 魔化内放完）
   spawnMinions(owner, target) {
     const specs = [
       { tint: 0xff5555, s: 1.6, spd: 150, dmg: 18 }, { tint: 0x55ff88, s: 1.3, spd: 210, dmg: 12 },
@@ -168,10 +171,21 @@ export default class KofFightScene extends Phaser.Scene {
     });
   }
 
-  // ★ 自爆爆炸特效
+  spawnHomingLightning(owner, target) {
+    const p = this.projectiles.create(owner.body.center.x + owner.facing * 20, owner.body.center.y - 10, 'kf_lightning');
+    p.body.setAllowGravity(false); p.body.setBounce(0, 0); p.setDepth(3);
+    const dx = target.body.center.x - p.x, dy = target.body.center.y - p.y, len = Math.hypot(dx, dy) || 1;
+    p.setVelocity(dx / len * 420, dy / len * 420);
+    p.rotation = Math.atan2(dy, dx);
+    p.owner = owner.id; p.facing = owner.facing; p.damage = 30; p.knockX = 120;
+    p.life = 4000; p.hitTargets = new Set(); p.consumeOnHit = true; p.isBug = false; p.tick = 0; p.lastTick = 0; p.stunMs = 0;
+    p.homing = true; p.target = target; p.speed = 420;
+    return p;
+  }
+
   boomFx(x, y, col) {
-    const c = this.add.circle(x, y, 14, col, 0.85).setDepth(5);
-    this.tweens.add({ targets: c, scaleX: 2.6, scaleY: 2.6, alpha: 0, duration: 300, onComplete: () => c.destroy() });
+    const b = this.add.image(x, y, 'kf_boom').setOrigin(0.5, 0.5).setDepth(5).setTint(col).setAlpha(0.85);
+    this.tweens.add({ targets: b, scaleX: 2.6, scaleY: 2.6, alpha: 0, duration: 300, onComplete: () => b.destroy() });
   }
 
   spawnWorldProj(x, y, key, vy, owner, damage, knock) {
@@ -191,12 +205,42 @@ export default class KofFightScene extends Phaser.Scene {
     this.p1.updateState(dt, in1, now);
     this.p2.updateState(dt, in2, now);
 
-    // 手动命中：弹 vs 角色 / 弹 vs 小怪
     const fighters = [this.p1, this.p2];
     this.projectiles.getChildren().slice().forEach(p => {
       if (!p || !p.active || !p.body) return;
+
+      if (p.homing) {
+        const tg = p.target;
+        if (!tg || !tg.alive) { p.homing = false; }
+        else {
+          const dx = tg.body.center.x - p.x, dy = tg.body.center.y - p.y, len = Math.hypot(dx, dy) || 1;
+          const desVx = dx / len * p.speed, desVy = dy / len * p.speed;
+          const k = 1 - Math.exp(-dt / 120);
+          const vx = p.body.velocity.x + (desVx - p.body.velocity.x) * k;
+          const vy = p.body.velocity.y + (desVy - p.body.velocity.y) * k;
+          p.setVelocity(vx, vy); p.rotation = Math.atan2(vy, vx);
+        }
+        p.setScale(1 + 0.12 * Math.sin(now * 0.04));
+        p.trailT = (p.trailT || 0) + dt;
+        if (p.trailT >= 70) {
+          p.trailT = 0;
+          const tr = this.add.image(p.x, p.y, 'kf_lightning').setOrigin(0.5, 0.5).setDepth(2)
+            .setAlpha(0.5).setTint(0xffdd44).setRotation(p.rotation).setScale(0.7);
+          this.tweens.add({ targets: tr, alpha: 0, duration: 220, onComplete: () => tr.destroy() });
+        }
+      }
+
       for (const f of fighters) {
         if (!f.alive || p.owner === f.id) continue;
+        if (f.shield && f.shield.type === 'disc') {
+          const db = f.discBox();
+          if (db && this.rectHit(p.body, db)) {
+            const ax = f.shield.anchorX, ay = f.shield.anchorY;
+            f.shieldHit(p.damage || 0);
+            if (this.floatDamage) this.floatDamage(ax, ay - 60, p.damage || 0, '#dd99ff');
+            p.destroy(); break;
+          }
+        }
         if (this.aabbHit(p, f)) { this.onHit(p, f); if (!p.active) break; }
       }
       if (!p.active) return;
@@ -206,7 +250,6 @@ export default class KofFightScene extends Phaser.Scene {
       });
     });
 
-    // 金光镜
     for (let i = this.mirrors.length - 1; i >= 0; i--) {
       const m = this.mirrors[i]; m.t += dt;
       m.img.x = m.target.body.center.x; m.img.y = m.target.body.center.y - 70;
@@ -214,7 +257,6 @@ export default class KofFightScene extends Phaser.Scene {
       if (m.t >= m.ttl) { this.spawnWorldProj(m.img.x, m.img.y + 30, 'kof_beam', 950, m.owner, 70, 260); m.img.destroy(); this.mirrors.splice(i, 1); }
     }
 
-    // ★ 小怪：追踪 + 接触自爆（炸一次即消失）
     this.minionGroup.getChildren().slice().forEach(m => {
       if (m.dead) { m.destroy(); return; }
       m.life -= dt; if (m.life <= 0 || !m.target.alive) { m.destroy(); return; }
@@ -228,12 +270,14 @@ export default class KofFightScene extends Phaser.Scene {
     });
 
     this.projectiles.getChildren().slice().forEach(p => { p.life -= dt; if (p.life <= 0) p.destroy(); });
-    this.updateUI();
+    this.updateUI(now);
   }
 
-  floatDamage(x, y, dmg) {
-    const c = dmg >= 100 ? '#ffdd33' : '#ffffff';
-    const tx = this.add.text(x, y, '-' + dmg, { fontSize: '18px', color: c, stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(6);
+  floatDamage(x, y, dmg, color) {
+    if (dmg <= 0 && !color) return;
+    const c = color || (dmg >= 100 ? '#ffdd33' : '#ffffff');
+    const txt = dmg > 0 ? ('-' + dmg) : '挡';
+    const tx = this.add.text(x, y, txt, { fontSize: '18px', color: c, stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(6);
     this.tweens.add({ targets: tx, y: y - 40, alpha: 0, duration: 600, onComplete: () => tx.destroy() });
   }
   onKO(loser) {
@@ -244,41 +288,78 @@ export default class KofFightScene extends Phaser.Scene {
     this.add.text(W / 2, H / 2 + 50, 'ENTER 重选模式   ESC 返回首页', { fontSize: '18px', color: '#cccccc' }).setOrigin(0.5).setDepth(10);
   }
 
+  makeBar(x, y, w, h, align, frameCol, slotCol, fgCol) {
+    const o = align === 1 ? 1 : 0;
+    const frame = this.add.rectangle(x, y, w + 4, h + 4, frameCol).setOrigin(o, 0.5).setDepth(8);
+    const slot = this.add.rectangle(x, y, w, h, slotCol).setOrigin(o, 0.5).setDepth(8);
+    const fg = this.add.rectangle(x, y, w, h, fgCol).setOrigin(o, 0.5).setDepth(9);
+    const hi = this.add.rectangle(x, y - h * 0.25, w, Math.max(1, h * 0.4), 0xffffff, 0.22).setOrigin(o, 0.5).setDepth(9);
+    return { frame, slot, fg, hi, w, h, align, x, y };
+  }
+  setBar(bar, ratio, color) {
+    const ww = Math.max(0, bar.w * Math.max(0, Math.min(1, ratio)));
+    bar.fg.setSize(ww, bar.h); if (color != null) bar.fg.setFillStyle(color);
+    bar.hi.setSize(ww, Math.max(1, bar.h * 0.4));
+  }
+  hpColor(r) { return r > 0.5 ? 0x33ff88 : r > 0.25 ? 0xffdd33 : 0xff4444; }
+
   buildUI(W, H, mode) {
-    const barW = 360, barH = 18, y = 24; this.barW = barW; this.barH = barH;
-    this.add.rectangle(20, y, barW, barH, 0x441111).setOrigin(0, 0.5).setDepth(8);
-    this.hp1fg = this.add.rectangle(20, y, barW, barH, 0x33ff88).setOrigin(0, 0.5).setDepth(9);
-    this.add.rectangle(W - 20, y, barW, barH, 0x441111).setOrigin(1, 0.5).setDepth(8);
-    this.hp2fg = this.add.rectangle(W - 20, y, barW, barH, 0xff7744).setOrigin(1, 0.5).setDepth(9);
-    this.add.text(20, y - 22, '韩立', { fontSize: '14px', color: '#9ff' }).setDepth(9);
-    this.add.text(W - 20, y - 22, '温天仁', { fontSize: '14px', color: '#fc9' }).setOrigin(1, 0).setDepth(9);
-    this.add.text(W / 2, 14, mode === 'pvp' ? '双人对决  韩立 vs 温天仁' : '韩立  VS  温天仁 (AI)', { fontSize: '16px', color: '#ffcc33' }).setOrigin(0.5).setDepth(9);
+    const barW = 380, barH = 18, mpH = 8;
+    const nameY = 16, hpY = 34, mpY = 52;
+    const LX = 24, RX = W - 24;
+
+    this.add.text(LX, nameY, '韩 立', { fontSize: '15px', color: '#9ff', stroke: '#002', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(9);
+    this.add.text(RX, nameY, '温天仁', { fontSize: '15px', color: '#fc9', stroke: '#200', strokeThickness: 3 }).setOrigin(1, 0.5).setDepth(9);
+
+    this.hp1 = this.makeBar(LX, hpY, barW, barH, 0, 0x66ddff, 0x330011, 0x33ff88);
+    this.hp2 = this.makeBar(RX, hpY, barW, barH, 1, 0x66ddff, 0x330011, 0xff7744);
+    this.mp1 = this.makeBar(LX, mpY, barW, mpH, 0, 0x4488cc, 0x001133, 0x33aaff);
+    this.mp2 = this.makeBar(RX, mpY, barW, mpH, 1, 0x4488cc, 0x001133, 0x33aaff);
+
+    this.hp1txt = this.add.text(LX + barW / 2, hpY, '', { fontSize: '12px', color: '#fff', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5, 0.5).setDepth(10);
+    this.hp2txt = this.add.text(RX - barW / 2, hpY, '', { fontSize: '12px', color: '#fff', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5, 0.5).setDepth(10);
+
+    this.add.text(W / 2, 14, mode === 'pvp' ? '双人对决  韩立 vs 温天仁' : '韩立  VS  温天仁 (AI)', { fontSize: '16px', color: '#ffcc33', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(9);
     const tip = mode === 'pvp'
-      ? 'P1: WASD + F剑 G巨剑 H闪避 R蓄 T虫 Y翅   |   P2: 方向/小键盘 + ,冰锥 .针 /闪避 L蓄雾 ;镜 \'变身'
-      : 'WASD移动  F剑 G巨剑 H闪避 R蓄阴魔 T虫群 Y翅   |   ESC 返回';
+      ? 'P1: WASD + F剑 G巨剑 H闪避 R蓄 T光罩 Y翅   |   P2: 方向/小键盘 + ,冰锥 .针 /闪避 L蓄雾 ;紫盘 \'变身'
+      : 'WASD移动  F剑 G巨剑 H闪避 R蓄阴魔 T光罩 Y翅   |   ESC 返回';
     this.add.text(W / 2, H - 8, tip, { fontSize: '12px', color: '#888' }).setOrigin(0.5).setDepth(9);
 
-    // ★ 头顶蓄力条（每人一组 bg+fg，默认隐藏）
-    this.chargeBars = {};
+    this.headBars = {};
     [this.p1, this.p2].forEach(f => {
       const bw = 64, bh = 7;
-      const bg = this.add.rectangle(0, 0, bw, bh, 0x000000, 0.6).setStrokeStyle(1, 0xffffff, 0.6).setOrigin(0, 0.5).setDepth(9).setVisible(false);
-      const fg = this.add.rectangle(0, 0, bw, bh, 0xffee55).setOrigin(0, 0.5).setDepth(10).setVisible(false);
-      this.chargeBars[f.id] = { bg, fg, bw, bh };
+      const cbg = this.add.rectangle(0, 0, bw, bh, 0x000000, 0.6).setStrokeStyle(1, 0xffffff, 0.6).setOrigin(0, 0.5).setDepth(9).setVisible(false);
+      const cfg = this.add.rectangle(0, 0, bw, bh, 0xffee55).setOrigin(0, 0.5).setDepth(10).setVisible(false);
+      const sbg = this.add.rectangle(0, 0, bw, bh, 0x000000, 0.6).setStrokeStyle(1, 0xffffff, 0.6).setOrigin(0, 0.5).setDepth(9).setVisible(false);
+      const sfg = this.add.rectangle(0, 0, bw, bh, 0xffdd55).setOrigin(0, 0.5).setDepth(10).setVisible(false);
+      this.headBars[f.id] = { cbg, cfg, sbg, sfg, bw, bh };
     });
   }
 
-  updateUI() {
-    this.hp1fg.setSize(this.barW * (this.p1.hp / this.p1.maxHp), this.barH);
-    this.hp2fg.setSize(this.barW * (this.p2.hp / this.p2.maxHp), this.barH);
-    // ★ 蓄力条跟随角色头顶，按进度填充
+  updateUI(now) {
+    const r1 = this.p1.hp / this.p1.maxHp, r2 = this.p2.hp / this.p2.maxHp;
+    this.setBar(this.hp1, r1, this.hpColor(r1));
+    this.setBar(this.hp2, r2, this.hpColor(r2));
+    this.hp1txt.setText(Math.ceil(this.p1.hp) + ' / ' + this.p1.maxHp);
+    this.hp2txt.setText(Math.ceil(this.p2.hp) + ' / ' + this.p2.maxHp);
+    const m1 = this.p1.mp / this.p1.maxMp, m2 = this.p2.mp / this.p2.maxMp;
+    this.setBar(this.mp1, m1, now < this.p1.mpFlashUntil ? 0xffffff : 0x33aaff);
+    this.setBar(this.mp2, m2, now < this.p2.mpFlashUntil ? 0xffffff : 0x33aaff);
     [this.p1, this.p2].forEach(f => {
-      const cb = this.chargeBars[f.id]; if (!cb) return;
+      const hb = this.headBars[f.id]; if (!hb) return;
+      const cx = f.vis.x - hb.bw / 2;
       if (f.charging) {
-        const x = f.vis.x - cb.bw / 2, y = f.vis.y - 72;
-        cb.bg.setVisible(true).setPosition(x, y);
-        cb.fg.setVisible(true).setPosition(x, y).setSize(Math.max(1, cb.bw * f.chargeProgress), cb.bh);
-      } else { cb.bg.setVisible(false); cb.fg.setVisible(false); }
+        hb.cbg.setVisible(true).setPosition(cx, f.vis.y - 72);
+        hb.cfg.setVisible(true).setPosition(cx, f.vis.y - 72).setSize(Math.max(1, hb.bw * f.chargeProgress), hb.bh);
+      } else { hb.cbg.setVisible(false); hb.cfg.setVisible(false); }
+      if (f.shield) {
+        const col = f.shield.type === 'aura' ? 0xffdd55 : 0xbb66ff;
+        const sx = (f.shield.type === 'disc') ? (f.shield.anchorX - hb.bw / 2) : cx;
+        const sy = (f.shield.type === 'disc') ? (f.shield.anchorY - 100) : (f.vis.y - 86);
+        hb.sbg.setVisible(true).setPosition(sx, sy);
+        hb.sfg.setVisible(true).setPosition(sx, sy)
+          .setSize(Math.max(1, hb.bw * Math.max(0, f.shield.hp / f.shield.maxHp)), hb.bh).setFillStyle(col);
+      } else { hb.sbg.setVisible(false); hb.sfg.setVisible(false); }
     });
   }
 
@@ -294,12 +375,35 @@ export default class KofFightScene extends Phaser.Scene {
     mk('kof_fog',    g => { g.fillStyle(0x9944dd, 0.6); g.fillCircle(24, 24, 22); g.generateTexture('kof_fog', 48, 48); });
     mk('kof_mirror', g => { g.lineStyle(4, 0xffdd44, 1); g.strokeCircle(20, 20, 16); g.fillStyle(0xffdd44, 0.3); g.fillCircle(20, 20, 12); g.generateTexture('kof_mirror', 40, 40); });
     mk('kof_beam',   g => { g.fillStyle(0xffee66, 1); g.fillRect(0, 0, 12, 60); g.generateTexture('kof_beam', 12, 60); });
-    // ★ 小怪占位升级：带眼睛+嘴的怪脸（圆对称，无朝向问题；tint 区分 6 只）
     mk('kof_minion', g => {
       g.fillStyle(0xffffff, 1); g.fillCircle(12, 12, 11);
       g.fillStyle(0x101010, 1); g.fillCircle(8, 9, 2.6); g.fillCircle(16, 9, 2.6);
       g.lineStyle(2, 0x101010, 1); g.beginPath(); g.moveTo(7, 16); g.lineTo(17, 16); g.strokePath();
       g.generateTexture('kof_minion', 24, 24);
+    });
+    mk('kf_shield_aura', g => {
+      g.lineStyle(4, 0xffffff, 0.9); g.strokeCircle(75, 75, 70);
+      g.fillStyle(0xffffff, 0.18); g.fillCircle(75, 75, 66);
+      g.lineStyle(2, 0xffffff, 0.5); g.strokeCircle(75, 75, 52);
+      g.generateTexture('kf_shield_aura', 150, 150);
+    });
+    mk('kf_shield_disc', g => {
+      g.fillStyle(0xffffff, 0.30); g.fillCircle(30, 30, 30); g.fillRect(0, 30, 60, 120); g.fillCircle(30, 150, 30);
+      g.fillStyle(0xffffff, 0.55); g.fillCircle(30, 30, 18); g.fillRect(12, 30, 36, 120); g.fillCircle(30, 150, 18);
+      g.generateTexture('kf_shield_disc', 60, 180);
+    });
+    mk('kf_boom', g => { g.fillStyle(0xffffff, 0.9); g.fillCircle(20, 20, 18); g.generateTexture('kf_boom', 40, 40); });
+    mk('kf_lightning', g => {
+      const pts = [[26, 3], [14, 28], [24, 30], [12, 61]];
+      const stroke = (w, col, a) => {
+        g.lineStyle(w, col, a); g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+        g.strokePath();
+      };
+      stroke(13, 0xffcc33, 0.30);
+      stroke(7,  0xffdd44, 0.85);
+      stroke(3,  0xffffff, 1.0);
+      g.generateTexture('kf_lightning', 40, 64);
     });
     g.destroy();
   }
