@@ -1,0 +1,28 @@
+# 依赖（千万别传）
+node_modules
+
+# 打包产物
+dist
+dist-ssr
+
+# 编辑器 / 系统文件
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 日志
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 环境变量（如果有密钥，别传）
+.env
+.env.local
+.env.*.local
